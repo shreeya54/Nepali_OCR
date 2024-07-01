@@ -25,7 +25,7 @@ APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 @app.route('/')
 def hello_world():
-   return render_template('index.html')
+    return render_template('index.html')
 
 
 @app.route('/photo', methods=['GET', 'POST'])
@@ -150,7 +150,8 @@ def preprocessing(img):
 
     return each_word_segmentation
 
-def dikka_remove(output): #Needed for Word segmentation
+
+def dikka_remove(output):  # Needed for Word segmentation
     resultafterdikka = []
     each_character = []
 
@@ -162,17 +163,21 @@ def dikka_remove(output): #Needed for Word segmentation
         ig = output[i]
         row, col = ig.shape
 
- #Detects and removes the largest horizontal line (referred to as "DIKA") in an image
+ # Detects and removes the largest horizontal line (referred to as "DIKA") in an image
         horizontal_kernel = cv.getStructuringElement(cv.MORPH_RECT, (40, 1))
-        detect_horizontal = cv.morphologyEx(ig, cv.MORPH_OPEN, horizontal_kernel, iterations=2)
-        cnts, _ = cv.findContours(detect_horizontal, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        detect_horizontal = cv.morphologyEx(
+            ig, cv.MORPH_OPEN, horizontal_kernel, iterations=2)
+        cnts, _ = cv.findContours(
+            detect_horizontal, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
         if len(cnts) > 0:
             c = max(cnts, key=cv.contourArea)
             X, Y, w, h = cv.boundingRect(c)
             ig[0:Y + h + 2, 0:X + w].fill(0)
 
-            r, inv1 = cv.threshold(ig, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-            cnts1, _ = cv.findContours(inv1, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+            r, inv1 = cv.threshold(
+                ig, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+            cnts1, _ = cv.findContours(
+                inv1, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
             for co in reversed(cnts1):
                 if cv.contourArea(co) > 300:
@@ -185,36 +190,21 @@ def dikka_remove(output): #Needed for Word segmentation
     return resultafterdikka, each_character
 
 
-@app.route('/cleanup')
-def cleanup_file():
-    path = "static/outimg"
-    willremoveimage = os.listdir(path)
-    if not willremoveimage:
-        pass
-    else:
-        for i in willremoveimage:
-            os.remove(path + "/" + i)  #For each file,deletes the file from the directory.
-
-    return render_template('index.html', title='Devnagarik - Home')
-
-#MERGED
-#@app.route('/')
-# def index():
-#     # Cleanup the directory
+# @app.route('/cleanup')
+# def cleanup_file():
 #     path = "static/outimg"
-#     willremoveimage = os.listdir(path#
+#     willremoveimage = os.listdir(path)
 #     if not willremoveimage:
 #         pass
 #     else:
 #         for i in willremoveimage:
-#             os.remove(path + "/" + i)  # For each file, deletes the file from the directory.
+#             os.remove(path + "/" + i)  #For each file,deletes the file from the directory.
 
 #     return render_template('index.html', title='Devnagarik - Home')
-# 
 
 
 @app.route('/send_pic', methods=['POST'])
-def button_pressed(): #letter detect and predict
+def button_pressed():  # letter detect and predict
     # print("Image recieved")
     dimensions = (100, 100)
     data_url = request.values['imgBase64']
@@ -236,7 +226,7 @@ def button_pressed(): #letter detect and predict
         resize = cv.resize(word[i], (32, 32)) / 255.0
         reshaped = np.reshape(resize, (1, 32, 32, 1))
 
-        prediction = newmodel.predict(reshaped)
+        prediction = trained_model.predict(reshaped)
         score_prediction = prediction > 0.5
         probab = str(np.amax(prediction))
         max = score_prediction.argmax()
@@ -250,8 +240,9 @@ def button_pressed(): #letter detect and predict
     print("*" * 10)
     return char
 
+
 @app.route('/uploader', methods=['GET', 'POST'])
-def upload(): #Word detect and predict
+def upload():  # Word detect and predict
     path = "static/outimg"
     willremoveimage = os.listdir(path)
     print(willremoveimage)
@@ -276,33 +267,37 @@ def upload(): #Word detect and predict
 
         def prediction(each_character):
             final_all_word = ""
+            prob = 0
             for i in range(len(each_character)):
                 each_word = ""
                 for j in each_character[i]:
                     character_img = j
-                    resize = cv.resize(j, (32, 32)) / 255.0;
+                    resize = cv.resize(j, (32, 32)) / 255.0
                     reshaped = np.reshape(resize, (1, 32, 32, 1))
-
-                    prediction = newmodel.predict(reshaped)
+                    prediction = trained_model.predict(reshaped)
+                    prob = prob + np.amax(prediction)
+                    print("Prob=", prob)
                     max = prediction.argmax()
                     predict_character = devnagarik_word[max]
                     each_word += predict_character
                 final_all_word += each_word + ' '
-            return final_all_word
+            return final_all_word, prob
 
         output = preprocessing(readingimg)
         resultafterdikka, each_character = dikka_remove(output)
-        final_result = prediction(each_character)
+        final_result, prob = prediction(each_character)
+        prob = prob/len(each_character[0])
+        print("Final Prob=", prob)
 
         makingimagename = list(string.ascii_letters)
 
         for i in range(len(resultafterdikka)):
-            cv.imwrite("static/outimg/image-" + makingimagename[i] + ".jpg", resultafterdikka[i])
+            cv.imwrite("static/outimg/image-" +
+                       makingimagename[i] + ".jpg", resultafterdikka[i])
 
         images = os.listdir("static/outimg")
 
-    return render_template('index.html', photos=newDes, images_name=images, result=final_result,
-                           title='Devnagrik - Predict')
+    return render_template('index.html', photos=newDes, images_name=images, result=final_result, processedImg=url_for('static', filename='/outimg/image-a.jpg'), probability=prob, title='Devnagrik - Predict')
 
 
 if __name__ == '__main__':
