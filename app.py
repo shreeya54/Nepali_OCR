@@ -96,26 +96,25 @@ def ROI(img):
     images_location = []
 
     line_seg_img = np.array([])
+    current_r = 0  # Initialize current row
     for r in range(row - 1):
         if np.equal(img[r:(r + 1)], one_row).all():
-            if line_seg_img.size == 0:
-                current_r = r
-            else:
-                images_location.append(line_seg_img[:-1])
+            if line_seg_img.size != 0:
+                images_location.append(line_seg_img)
                 line_seg_img = np.array([])
-                current_r = r
         else:
-            #             print(r)
-            if line_seg_img.size <= 1:
-                line_seg_img = np.vstack((np_gray[r], np_gray[r + 1]))
-
+            if line_seg_img.size == 0:
+                line_seg_img = np_gray[r:r + 1]
             else:
-                line_seg_img = np.vstack((line_seg_img, np_gray[r + 1]))
+                line_seg_img = np.vstack((line_seg_img, np_gray[r + 1:r + 2]))
+
+    if line_seg_img.size != 0:
+        images_location.append(line_seg_img)
 
     return images_location
 
 
-def preprocessing(img):
+def preprocessing(img):  # word segment
     # resizing the image
     img = cv.resize(img, (800, 600), interpolation=cv.INTER_AREA)
     image_area = img.shape[0] * img.shape[1]
@@ -145,16 +144,23 @@ def preprocessing(img):
     each_word_segmentation = []
     for line in np.asarray(line_segmentation):
         word_segementation = ROI(line.T)
-        for words in np.asarray(word_segementation):
-            each_word_segmentation.append(words.T)
+        print(len(word_segementation), "=word_segementation")
+        for i in word_segementation:
+            i = ROI(i.T)
+            print(i, "=i")
+            for words in np.asarray(i):
+                # cv.imshow('img', words)
+                # cv.waitKey(0)
+                # cv.destroyAllWindows()
+                each_word_segmentation.append(words)
 
+    print(len(each_word_segmentation), "=each_word_segmentation")
     return each_word_segmentation
 
 
 def dikka_remove(output):  # Needed for Word segmentation
     resultafterdikka = []
     each_character = []
-
     for i in range(0, len(output)):
         each = []
         main = output[i]
@@ -179,13 +185,13 @@ def dikka_remove(output):  # Needed for Word segmentation
             cnts1, _ = cv.findContours(
                 inv1, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
-            for co in reversed(cnts1):
-                if cv.contourArea(co) > 300:
-                    X, Y, w, h = cv.boundingRect(co)
-                    cv.rectangle(inv3, (X, 0), (X + w, Y + h), 255, 1)
-                    each.append((inv3[0:Y + h, X:X + w]))
-            each_character.append(each)
-            resultafterdikka.append(inv3)
+        for co in reversed(cnts1):
+            if cv.contourArea(co) > 100:
+                X, Y, w, h = cv.boundingRect(co)
+                cv.rectangle(inv3, (X, 0), (X + w, Y + h), 255, 1)
+                each.append((inv3[0:Y + h, X:X + w]))
+        each_character.append(each)
+        resultafterdikka.append(inv3)
 
     return resultafterdikka, each_character
 
@@ -201,6 +207,9 @@ def dikka_remove(output):  # Needed for Word segmentation
 #             os.remove(path + "/" + i)  #For each file,deletes the file from the directory.
 
 #     return render_template('index.html', title='Devnagarik - Home')
+
+
+#
 
 
 @app.route('/send_pic', methods=['POST'])
@@ -268,10 +277,12 @@ def upload():  # Word detect and predict
         def prediction(each_character):
             final_all_word = ""
             prob = 0
+            ran = 0
             for i in range(len(each_character)):
                 each_word = ""
                 for j in each_character[i]:
                     character_img = j
+                    ran += 1
                     resize = cv.resize(j, (32, 32)) / 255.0
                     reshaped = np.reshape(resize, (1, 32, 32, 1))
                     prediction = trained_model.predict(reshaped)
@@ -281,24 +292,30 @@ def upload():  # Word detect and predict
                     predict_character = devnagarik_word[max]
                     each_word += predict_character
                 final_all_word += each_word + ' '
-            return final_all_word, prob
+            print("prediction ran ", ran, " times")
+            return final_all_word, prob/ran
 
         output = preprocessing(readingimg)
+        print(len(output), "=lenOp")
         resultafterdikka, each_character = dikka_remove(output)
+
         final_result, prob = prediction(each_character)
-        prob = prob/len(each_character[0])
+        prob = round(prob, 4)*100
         print("Final Prob=", prob)
+        print(len(each_character), "=each_character")
 
         makingimagename = list(string.ascii_letters)
 
+        # save the result after dikka images
         for i in range(len(resultafterdikka)):
             cv.imwrite("static/outimg/image-" +
                        makingimagename[i] + ".jpg", resultafterdikka[i])
 
+        # get all filenames from "static/outimg"
         images = os.listdir("static/outimg")
 
-    return render_template('index.html', photos=newDes, images_name=images, result=final_result, processedImg=url_for('static', filename='/outimg/image-a.jpg'), probability=prob, title='Devnagrik - Predict')
+    return render_template('index.html', photos=newDes, all_final_images=images, result=final_result, processedImg=url_for('static', filename='/outimg/image-a.jpg'), probability=prob, title='Devnagrik - Predict')
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    app.run(host="0.0.0.0", debug=True)

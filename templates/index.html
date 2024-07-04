@@ -61,11 +61,13 @@
       <textarea name="textarea" id="textare" cols="30" rows="2" readonly>{{result}}</textarea>
     </label>
     <img src={{photos}} alt="user uploaded image" width="300" height="300">
-    <div class="probability">Probability={{probability}}
-      <img src="{{processedImg}}" alt="Processed image Here">
-    </div>
     
-  
+    <!--jinja-->
+    <div class="probability">Probability(%)={{probability}}%
+      {% for image in all_final_images%}
+      <img src="{{ url_for('static', filename='outimg/' + image) }}" alt="Processed image Here">
+      {% endfor%}
+    </div>
   
 
   <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js"
